@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AU Admin Dashboard</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;}
+header{background:#003366;color:#fff;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;}
+table{width:100%;border-collapse:collapse;margin:20px 0;background:#fff;}
+th,td{border:1px solid #ccc;padding:8px;text-align:left;}
+th{background:#003366;color:#fff;}
+button{padding:5px 10px;margin:2px;border:none;border-radius:4px;cursor:pointer;}
+.approve{background:green;color:#fff;}
+.reject{background:red;color:#fff;}
+.delete{background:#cc0000;color:#fff;}
+.summary{background:#fff;padding:15px;margin:20px;border-radius:8px;}
+#docPreview{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);justify-content:center;align-items:center;}
+#docPreview iframe{width:80%;height:80%;border:none;background:#fff;}
+#docPreview button{position:absolute;top:20px;right:20px;padding:10px;background:red;color:#fff;border:none;border-radius:6px;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<header>
+<h2>Admin Dashboard</h2>
+<button onclick="logout()">Logout</button>
+</header>
+
+<div style="padding:20px;">
+<table id="studentTable">
+<thead>
+<tr>
+<th>ID</th>
+<th>Name</th>
+<th>Strand</th>
+<th>Status</th>
+<th>Section</th>
+<th>GWA</th>
+<th>Documents</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+
+<div class="summary">
+<h3>Student Summary</h3>
+<h4>Highest Average</h4>
+<ul id="highestList"></ul>
+<h4>Lowest Average</h4>
+<ul id="lowestList"></ul>
+</div>
+
+<div id="docPreview">
+<button onclick="closePreview()">Close</button>
+<iframe id="previewFrame"></iframe>
+</div>
+
+<script>
+// ---------------- ADMIN CHECK ----------------
+if(localStorage.getItem('adminLoggedIn') !== 'true'){
+    location.href='admin.html';
+}
+
+// ---------------- LOAD STUDENTS ----------------
+function loadStudents(){
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const tbody = document.querySelector('#studentTable tbody');
+    tbody.innerHTML = '';
+
+    const docNames = ["2x2 Photo","Face Capture","Report Card","Birth Certificate","Good Moral"];
+
+    students.forEach(s=>{
+        const tr = document.createElement('tr');
+
+        if(s.hsAverage && s.hsAverage<85) tr.style.background='#ffe5e5';
+
+        tr.innerHTML = `
+<td>${s.id}</td>
+<td>${s.firstName} ${s.lastName}</td>
+<td>${s.strand || '---'}</td>
+<td>${s.status || 'Pending'}</td>
+<td>${s.section || '---'}</td>
+<td>${s.hsAverage ? s.hsAverage+'%' : '---'}</td>
+<td>
+${s.documents && s.documents.length>0
+? s.documents.map((doc,i)=>`<a href="#" onclick="previewDoc('${doc}')">${docNames[i]||'Document'}</a>`).join('<br>')
+: 'No Documents'}
+</td>
+<td>
+<button class="approve" onclick="updateStatus('${s.id}','Admitted')">Admit</button>
+<button class="reject" onclick="updateStatus('${s.id}','Failed')">Fail</button>
+<button class="approve" onclick="approve('${s.id}')">Approve</button>
+<button class="reject" onclick="reject('${s.id}')">Reject</button>
+<button class="delete" onclick="deleteStudent('${s.id}')">Delete</button>
+</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    updateStudentSummary();
+}
+
+// ---------------- SUMMARY ----------------
+function updateStudentSummary(){
+    const students = JSON.parse(localStorage.getItem('students')) || [];
+    const highList = document.getElementById('highestList');
+    const lowList = document.getElementById('lowestList');
+    highList.innerHTML=''; lowList.innerHTML='';
+
+    if(!students.length) return;
+
+    const highest = Math.max(...students.map(s=>s.hsAverage||0));
+    const lowest = Math.min(...students.map(s=>s.hsAverage||0));
+
+    students.filter(s=>s.hsAverage===highest).forEach(s=>{
+        const li=document.createElement('li');
+        li.textContent=`${s.firstName} ${s.lastName} - ${s.hsAverage}%`;
+        highList.appendChild(li);
+    });
+
+    students.filter(s=>s.hsAverage===lowest).forEach(s=>{
+        const li=document.createElement('li');
+        li.textContent=`${s.firstName} ${s.lastName} - ${s.hsAverage}%`;
+        lowList.appendChild(li);
+    });
+}
+
+// ---------------- STATUS ----------------
+function updateStatus(id,status){
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    students = students.map(s=>{
+        if(s.id===id){
+            s.status=status;
+            s.popupShown=false;
+            if(status==='Admitted'){
+                s.message="🎉 You have been admitted!";
+                if(!s.section) s.section = s.strand + ' - ' + (Math.floor(Math.random()*3)+1);
+            } else if(status==='Failed'){
+                s.message="Application failed. You may try again.";
+            }
+        }
+        return s;
+    });
+    localStorage.setItem('students',JSON.stringify(students));
+    alert("Updated to "+status);
+    loadStudents();
+}
+
+// ---------------- APPROVE / REJECT ----------------
+function approve(id){ updateStatus(id,"Approved"); }
+function reject(id){ updateStatus(id,"Rejected"); }
+
+// ---------------- DELETE ----------------
+function deleteStudent(id){
+    if(!confirm("Delete this student?")) return;
+    let students = JSON.parse(localStorage.getItem('students')) || [];
+    students = students.filter(s=>s.id!==id);
+    localStorage.setItem('students',JSON.stringify(students));
+    loadStudents();
+}
+
+// ---------------- LOGOUT ----------------
+function logout(){
+    localStorage.removeItem('adminLoggedIn');
+    location.href='admin.html';
+}
+
+// ---------------- DOCUMENT PREVIEW ----------------
+function previewDoc(base64){
+    document.getElementById('previewFrame').src = base64;
+    document.getElementById('docPreview').style.display='flex';
+}
+function closePreview(){
+    document.getElementById('docPreview').style.display='none';
+    document.getElementById('previewFrame').src='';
+}
+
+// ---------------- INITIAL LOAD ----------------
+loadStudents();
+</script>
+
+</body>
+</html>
